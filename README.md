@@ -50,8 +50,18 @@ Real values go in `.env` (gitignored); `.env.example` documents the keys.
    Enable only against a **disposable env**: add the full secret set (`BASE_URL`,
    `ADMIN_USER`, `ADMIN_PASS`) and uncomment. Runs serially (`workers: 1`).
 
-Add secrets via `gh secret set NAME` or GitHub UI (Settings → Secrets → Actions);
-read values from your gitignored `.env`. Never commit secrets.
+Add secrets via the GitHub UI (Settings → Secrets → Actions) or the helper
+`scripts/set-ci-secrets.ps1`, which reads values from your gitignored `.env` and
+pushes them with `gh` (after `gh auth login`) without printing them:
+
+```powershell
+# read-only live job (mint a fresh token in User Actions > Profile > Add Token):
+./scripts/set-ci-secrets.ps1 -ApiToken '<freshly minted token>'
+# also stage the full-live secrets (BASE_URL/ADMIN_USER/ADMIN_PASS):
+./scripts/set-ci-secrets.ps1 -ApiToken '<token>' -IncludeFullLive
+```
+
+Never commit secret values; the helper contains none.
 
 ## Layout
 
