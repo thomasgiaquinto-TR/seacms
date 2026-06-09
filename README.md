@@ -34,6 +34,23 @@ Real values go in `.env` (gitignored); `.env.example` documents the keys.
 | `API_BASE_URL` / `API_TOKEN` | Optional REST/Swagger client (see "API cases") |
 | `ALL_BROWSERS` | Set to also run chromium/firefox/webkit |
 
+## CI
+
+`.github/workflows/ci.yml` runs on push/PR with four jobs:
+
+1. **lint** (always) — `npm ci` + `tsc --noEmit` + `eslint`; statically covers every spec.
+2. **no-network** (always) — runs the `--grep "no network"` contract test (ApiClient
+   config guard); no browser, no credentials.
+3. **api-read-live** (auto-activating) — runs `tests/api/` read-only GETs. Self-skips
+   (green) until `API_BASE_URL` + `API_TOKEN` secrets are added; then it lights up.
+   A stale token (env restarts invalidate tokens) will 401 → red; rotate the secret.
+4. **full-live** (commented) — the browser/mutating suite (login + create/modify).
+   Enable only against a **disposable env**: add the full secret set (`BASE_URL`,
+   `ADMIN_USER`, `ADMIN_PASS`) and uncomment. Runs serially (`workers: 1`).
+
+Add secrets via `gh secret set NAME` or GitHub UI (Settings → Secrets → Actions);
+read values from your gitignored `.env`. Never commit secrets.
+
 ## Layout
 
 ```

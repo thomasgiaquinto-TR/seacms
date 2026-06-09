@@ -1,0 +1,95 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  # 1) Static checks — typecheck + lint. Covers ALL specs (incl. live ones) for free.
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - run: npx tsc --noEmit
+      - run: npm run lint
+
+  # 2) No-network — execute the specs that run without any credentials or browser.
+  #    Currently just the ApiClient contract guard (rejects on missing config).
+  #    No browser is launched (the test uses no page fixture), so no Chrome install.
+  no-network:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run no-network contract tests
+        run: npx playwright test --project=chrome --grep "no network"
+
+  # 3) Read-only live API — auto-activating. Self-skips (green) until the
+  #    API_BASE_URL + API_TOKEN secrets exist; then runs read-only GETs only.
+  #    No login, no data mutation, no browser (pure REST via APIRequestContext).
+  #    NOTE: this deploy invalidates Authentication Tokens on restart — a stale
+  #    API_TOKEN secret will 401 and turn this job red; rotate the secret if so.
+  api-read-live:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+      - run: npm ci
+      - name: Run read-only API tests (self-skip without secrets)
+        env:
+          API_BASE_URL: ${{ secrets.API_BASE_URL }}
+          API_TOKEN: ${{ secrets.API_TOKEN }}
+        run: npx playwright test --project=chrome tests/api/
+      - name: Upload report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-api-read
+          path: reports/html
+          retention-days: 7
+
+  # 4) FULL LIVE (browser + mutating) — DELIBERATELY DISABLED.
+  #    These specs log in (ADMIN_USER/ADMIN_PASS) and create/modify data (mint
+  #    tokens, create cases, ACCESS records, actor aliases/contacts/addresses).
+  #    Enable ONLY against a disposable env, never prod: add the FULL secret set
+  #    (BASE_URL, ADMIN_USER, ADMIN_PASS) — all-or-nothing, see the partial-secret
+  #    footgun — then uncomment this job. The suite runs serially (workers: 1)
+  #    because the deploy allows one active session per user.
+  #
+  # full-live:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: actions/setup-node@v4
+  #       with:
+  #         node-version: '20'
+  #         cache: 'npm'
+  #     - run: npm ci
+  #     - name: Install Chrome for Playwright
+  #       run: npx playwright install --with-deps chrome
+  #     - name: Run full live suite
+  #       env:
+  #         BASE_URL: ${{ secrets.BASE_URL }}
+  #         ADMIN_USER: ${{ secrets.ADMIN_USER }}
+  #         ADMIN_PASS: ${{ secrets.ADMIN_PASS }}
+  #       run: npm test
+  #     - name: Upload report on failure
+  #       if: failure()
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: playwright-report-full
+  #         path: reports/html
+  #         retention-days: 7
