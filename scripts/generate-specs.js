@@ -21,7 +21,9 @@ const SRC = path.join(ROOT, 'testplan', 'SEATC_testplan.txt');
 const OUT_DIR = path.join(ROOT, 'tests', 'regression');
 
 // Cases that already have a hand-written, verified active spec — do not generate.
-const HAND_WRITTEN = new Set(['27441', '755', '28234', '33993', '34072', '34027', '28156', '28161']);
+const HAND_WRITTEN = new Set([
+  '27441', '755', '28234', '33993', '34072', '34027', '28156', '28161', '27681',
+]);
 
 const MARKERS = new Set(['Summary', 'Preconditions', '#', 'Action', 'Expected Result']);
 
