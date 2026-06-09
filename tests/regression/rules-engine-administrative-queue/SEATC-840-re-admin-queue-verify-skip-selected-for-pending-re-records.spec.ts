@@ -1,44 +1,54 @@
-import { test } from '../../../fixtures';
+import { test, expect } from '../../../fixtures';
+import { waitForNoBlockOverlay } from '../../../helpers/ui';
 
 /**
  * SEATC-840  RE Admin Queue: verify Skip Selected for Pending RE records
- * Suite: Rules Engine Administrative Queue
- * Summary:
- *   v2 is based on ECORE-6251
+ * Suite: RCJ - Notification Rules Engine Actions > Rules Engine Administrative Queue
  *
- * Preconditions:
- *   User has Administrator Rules Engine Queue permission on Several RE result records with Status =
- *   Pending Clerk exist To get Pending Clerk RE records, trigger Maybe Actions, e.g.; Agenda = Tickler
- *   Condition: Tickler Type = Seal File, Is Task = False Event = On Create Action = Maybe Assign
- *   Ticklers Action Parameter: Tickler ID = Tickler ID
+ * The Rules Engine Administrator Queue (Administration > Administrator Queues >
+ * Rules Engine Queue, /admin/rulesengineresultqueue/search) is the admin-wide
+ * counterpart of the personal queue (SEATC-39558): it can filter/show records
+ * across ALL users (its User filter is a selectable dropdown), not just the
+ * current user. This spec opens it and runs a Pending Clerk search.
  *
- * Status: SCAFFOLD (test.fixme) — steps captured verbatim from the SEATC test
- * plan. Implement the actions/assertions against the live app; remove .fixme
- * once green. Some steps need config changes, multiple users, or external
- * tools (Swagger/Postman) as noted in Preconditions.
+ * SCOPE NOTE: the plan's core action — check a Pending Clerk record, Action >
+ * Skip Selected, and confirm it flips to Completed — MUTATES Rules Engine data,
+ * so it's out of scope here. This spec covers the read-only path: the admin
+ * screen opens, exposes an across-users User filter, and a status search renders
+ * results.
+ *
+ * Status: ACTIVE (UI, read-only — searches, mutates nothing).
  */
-test.describe('SEATC-840', () => {
-  test.fixme('SEATC-840 RE Admin Queue: verify Skip Selected for Pending RE records', async ({ loginHelper }) => {
-    await loginHelper.loginAsAdmin();
-    await test.step('1. Go to Administration > Rules Engine Administrative Queue', async () => {
-      // Expected: Rules Engine Administrative Queue screen opens
-      // TODO: implement step
+test.describe('SEATC-840 Rules Engine Administrator Queue', () => {
+  test('admin queue opens with an across-users filter and a status search runs', async ({
+    authedPage,
+  }) => {
+    const page = authedPage;
+    const main = page.getByRole('main');
+
+    await test.step('Open the Rules Engine Administrator Queue', async () => {
+      await page.goto('/admin/rulesengineresultqueue/search');
+      await expect(
+        page.getByRole('heading', { name: 'Rules Engine Administrator Queue', level: 1 }),
+      ).toBeVisible();
     });
-    await test.step('2. Select Status = Pending Clerk Click [Search]', async () => {
-      // Expected: All records with Status = Pending Clerk are displayed
-      // TODO: implement step
+
+    await test.step('It is the admin queue: the User filter is selectable (across users)', async () => {
+      // The personal queue (SEATC-39558) fixes User to the current user as plain
+      // text; the admin queue offers a "Select" dropdown to filter by any user.
+      await expect(main.getByText('User').first()).toBeVisible();
+      await expect(main.getByRole('link', { name: /Select/ }).first()).toBeVisible();
     });
-    await test.step('3. Check checkbox for one of the pending record Click [Action] > Skip Selected', async () => {
-      // Expected: Screen is refreshed, successful save message is displayed Record is no longer displayed in Results table with Pending Clerk status
-      // TODO: implement step
-    });
-    await test.step('4. Select Status = Completed Click [Search]', async () => {
-      // Expected: Record updated on step 3 is displayed in Results table
-      // TODO: implement step
-    });
-    await test.step('5. Open case for which record was skipped on step 3 Go to Rules Engine Results Inspect record with Agenda = Tickler', async () => {
-      // Expected: Record status = Completed
-      // TODO: implement step
+
+    await test.step('Search Status = Pending Clerk -> results render', async () => {
+      const statusSelect = page
+        .getByRole('combobox')
+        .filter({ has: page.getByRole('option', { name: 'Pending Clerk', exact: true }) });
+      await statusSelect.selectOption({ label: 'Pending Clerk' });
+      await main.getByRole('button', { name: 'Search', exact: true }).click();
+      await waitForNoBlockOverlay(page);
+      await expect(page.getByRole('heading', { name: 'Results', level: 2 })).toBeVisible();
+      await expect(main.getByRole('table')).toBeVisible();
     });
   });
 });
