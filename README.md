@@ -153,6 +153,10 @@ Running those blind would produce false failures. So specs come in two forms:
   quirks: the detail path uses a capital `R` (`.../accessResponse/{id}/...`), and
   an ACCESS Response is only addressable by id while still linked to a request
   (deleting the request first orphans it → then it 404s), hence the cleanup order.
+- **`SEATC-28145-...spec.ts`** (GATED, self-skips): POST an ACCESS Response with
+  no `accessRequestID` → 201 ("saves with a blank request id"). A request-less
+  response is an undeletable orphan on this deploy, so it only runs when
+  `RUN_ORPHANING_TESTS=1` (skipped by default to keep the env clean).
 - Shared token helpers live in `helpers/tokens.ts` (`acquireApiToken` /
   `removeMintedToken`), used by the API-driven specs.
 - **Token strategy:** `API_TOKEN` is empty by default, so each API spec mints a

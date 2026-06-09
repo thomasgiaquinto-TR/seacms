@@ -1,50 +1,87 @@
-import { test } from '../../../fixtures';
+import { test, expect } from '../../../fixtures';
+import { ProfilePage } from '../../../page-objects/ProfilePage';
+import { ApiClient, resolveApiBaseUrl } from '../../../helpers/ApiClient';
+import { acquireApiToken, removeMintedToken } from '../../../helpers/tokens';
 
 /**
  * SEATC-28145  ACCESS Response can be saved with blank ACCESS Request ID
- * Suite: ACCESS Integration > ACCESS Request
- * Summary:
- *   Based on the SEACMS-2246 acceptance criteria 4.3
+ * Suite: ACCESS Integration > ACCESS Request  (SEACMS-2246 AC 4.3)
  *
- * Preconditions:
- *   Docket Entry Broadcast Event is configured Broadcast event process configured and running
- *   (SEATC-248)
+ * Core behaviour: POST /v1/custom/accessresponse WITHOUT an accessRequestID still
+ * saves the response (HTTP 201). We first create an ACCESS Request (the plan's
+ * precondition) for context, then post a request-less response.
  *
- * Status: SCAFFOLD (test.fixme) — steps captured verbatim from the SEATC test
- * plan. Implement the actions/assertions against the live app; remove .fixme
- * once green. Some steps need config changes, multiple users, or external
- * tools (Swagger/Postman) as noted in Preconditions.
+ * ⚠️ GATED / SELF-SKIPPING BY DEFAULT. A response with no linked request is an
+ * orphan on this deploy, and orphan responses cannot be addressed or deleted by
+ * id (GET/DELETE 404) — so this test would leave an UNDELETABLE record every run.
+ * It only runs when RUN_ORPHANING_TESTS=1; otherwise it skips. (Verified passing
+ * when enabled.) Case + request status/type ids are resolved at runtime.
  */
-test.describe('SEATC-28145', () => {
-  test.fixme('SEATC-28145 ACCESS Response can be saved with blank ACCESS Request ID', async ({ loginHelper }) => {
-    await loginHelper.loginAsAdmin();
-    await test.step('1. Create a Civil case in CMS', async () => {
-      // Expected: Case has been created
-      // TODO: implement step
+
+const allowOrphaning = process.env.RUN_ORPHANING_TESTS === '1';
+
+async function deleteRequestIfPresent(api: ApiClient, requestId: string): Promise<void> {
+  if (!requestId) return;
+  await api.deleteAccessRequest(requestId).catch(() => undefined);
+}
+
+test.describe('SEATC-28145 ACCESS Response - blank ACCESS Request ID', () => {
+  test.skip(
+    !allowOrphaning,
+    'Creates an undeletable orphan ACCESS response on this deploy; set RUN_ORPHANING_TESTS=1 to run',
+  );
+
+  test('an ACCESS Response saves (201) with no accessRequestID', async ({ authedPage }) => {
+    const profile = new ProfilePage(authedPage);
+    const apiBaseUrl = resolveApiBaseUrl();
+    const tokenName = `pw-api-${Date.now()}`;
+    let minted = false;
+    let requestId = '';
+
+    const acquired = await test.step('Obtain an Authentication Token', async () => {
+      const result = await acquireApiToken(profile, tokenName);
+      minted = result.minted;
+      expect(result.token).toBeTruthy();
+      return result;
     });
-    await test.step('2. Navigate to Swagger and authenticate', async () => {
-      // Expected: Swagger has been opened and user has been authenticated
-      // TODO: implement step
-    });
-    await test.step('3. Navigate to ACCESS Request - POST /custom/accessrequest and click on \'Try it out!\'', async () => {
-      // Expected: accessRequestDTO is opened
-      // TODO: implement step
-    });
-    await test.step('4. Provide values as below and click Execute: { "accessRequestDetails": [ { "accessRequestDetailKey": "FirstName", //Request Key "accessRequestDetailValue": "Potter"//Value for the Request Key } ], "caseInstance": "3", //ID of the created Case "requestDate": "2022-02-14T12:56:56.383Z", //Current Date and Time "requestStatus": "2000008", //Request Status ID "requestType": "2000007" //Request Type ID }', async () => {
-      // Expected: Access Request is successfully created with 201 code
-      // TODO: implement step
-    });
-    await test.step('5. Navigate to CMS > Administration > ACCESS Search > Search for the created request', async () => {
-      // Expected: Record is displayed in the search results.
-      // TODO: implement step
-    });
-    await test.step('6. Navigate to ACCESS Response - POST /custom/accessresponse and click on \'Try it out!\'', async () => {
-      // Expected: accessResponseDTO is opened
-      // TODO: implement step
-    });
-    await test.step('7. Provide values as below and click on execute { "accessRequestID": "2", // Empty value here or we can remove the whole string "accessResponseDetails": [ { "accessResponseDetailKey": "LastName", "accessResponseDetailValue": "Harry" } ], "responseDate": "2022-02-14T13:02:24.509Z" }', async () => {
-      // Expected: ACCESS Response Record is saved
-      // TODO: implement step
-    });
+
+    const api = await ApiClient.create({ baseUrl: apiBaseUrl, token: acquired.token });
+    try {
+      await test.step('Precondition: create an ACCESS Request (201)', async () => {
+        const [caseIds, statusIds, typeIds] = await Promise.all([
+          api.listCaseIds(0, 1),
+          api.listAccessRequestStatusIds(),
+          api.listAccessRequestTypeIds(),
+        ]);
+        const res = await api.createAccessRequest({
+          accessRequestDetails: [
+            { accessRequestDetailKey: 'FirstName', accessRequestDetailValue: 'PwApi' },
+          ],
+          caseInstance: caseIds[0],
+          requestDate: new Date().toISOString(),
+          requestStatus: statusIds[0],
+          requestType: typeIds[0],
+        });
+        expect(res.status(), 'POST accessrequest -> 201').toBe(201);
+        requestId = ApiClient.locationId(res);
+      });
+
+      await test.step('POST an ACCESS Response with NO accessRequestID -> saved (201)', async () => {
+        const res = await api.createAccessResponse({
+          accessResponseDetails: [
+            { accessResponseDetailKey: 'LastName', accessResponseDetailValue: 'PwApi' },
+          ],
+          responseDate: new Date().toISOString(),
+          // accessRequestID intentionally omitted — the behaviour under test.
+        });
+        expect(res.status(), 'response should save even without a request id').toBe(201);
+      });
+    } finally {
+      await test.step('Cleanup: delete the request (the request-less response orphan persists)', async () => {
+        await deleteRequestIfPresent(api, requestId);
+        await api.dispose();
+        await removeMintedToken(profile, tokenName, minted);
+      });
+    }
   });
 });
