@@ -1,5 +1,7 @@
 # SEATC / C-Track CMS — Playwright E2E Tests
 
+[![CI](https://github.com/thomasgiaquinto-TR/seacms/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/thomasgiaquinto-TR/seacms/actions/workflows/ci.yml)
+
 Browser + API test automation for the C-Track CMS deploy at
 **https://seacms-qa.ctrack.thomsonreuters.com** (C-Track CMS v2.2.0).
 
